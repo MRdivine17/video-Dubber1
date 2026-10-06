@@ -23,6 +23,9 @@ def parse_args(argv: list[str] | None = None) -> Options:
     parser.add_argument("--voice", choices=["clone", "edge"], default="clone",
                         help="clone = XTTS v2 clone of each speaker (default); edge = edge-tts neural voices")
     parser.add_argument("--speakers", type=int, help="number of speakers (default: auto-detect)")
+    parser.add_argument("--translator", choices=["auto", "speech", "text"], default="auto",
+                        help="speech = Whisper translates the audio; text = IndicTrans2/NLLB translate the "
+                             "transcript; auto = speech for Indian languages, text otherwise (default)")
     parser.add_argument("--no-polish", action="store_true", help="skip the LLM translation polish pass")
     parser.add_argument("--llm-model", help="override the auto-detected LLM model for the polish pass")
     parser.add_argument("--whisper-model", default=DEFAULT_WHISPER_MODEL, help="faster-whisper model name")
@@ -42,6 +45,7 @@ def parse_args(argv: list[str] | None = None) -> Options:
         language=args.lang,
         voice=args.voice,
         speakers=args.speakers,
+        translator=args.translator,
         polish=not args.no_polish,
         llm_model=args.llm_model,
         whisper_model=args.whisper_model,

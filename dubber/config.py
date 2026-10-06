@@ -62,6 +62,7 @@ class Options:
     language: str | None = None          # source language code; None = auto-detect
     voice: str = "clone"                 # "clone" (XTTS v2) or "edge" (edge-tts stock voices)
     speakers: int | None = None          # None = auto-detect number of speakers
+    translator: str = "auto"             # "speech" (from audio), "text" (from transcript) or "auto"
     polish: bool = True                  # LLM pass for natural, time-fitted English
     llm_model: str | None = None         # polish model override; None = auto-detect (dubber/llm.py)
     whisper_model: str = DEFAULT_WHISPER_MODEL

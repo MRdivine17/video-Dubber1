@@ -3,7 +3,7 @@ import {
   ArrowRight, Clock, ClipboardPaste, Info, Languages, Link2, LoaderCircle, MicVocal, RotateCcw, Sparkles, TriangleAlert, User,
   Users, X,
 } from "lucide-react";
-import { api, cleanUrl, isYoutubeUrl, type JobRequest, type SystemInfo, type VideoMeta } from "../api";
+import { api, cleanUrl, isYoutubeUrl, type JobRequest, type SystemInfo, type Translator, type VideoMeta } from "../api";
 import { fmtDuration } from "../format";
 import { Segmented, Thumb, Toggle } from "./ui";
 
@@ -32,6 +32,7 @@ export function Composer({ system, onStart, onSystemChanged }: {
   const [minutes, setMinutes] = useState(2);
   const [voice, setVoice] = useState<"clone" | "edge">("clone");
   const [speakers, setSpeakers] = useState<number | null>(null);
+  const [translator, setTranslator] = useState<Translator>("auto");
   const [polish, setPolish] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +95,7 @@ export function Composer({ system, onStart, onSystemChanged }: {
         max_minutes: length === "clip" ? minutes : null,
         voice,
         speakers,
+        translator,
         polish: polish && llmOk,
         llm_model: polish && llmOk ? llmModel : null,
       });
@@ -201,7 +203,15 @@ export function Composer({ system, onStart, onSystemChanged }: {
           </div>
 
           <div className="option">
-            <span className="option-label">
+            <span className="option-label"><Languages size={13} /> Translate from</span>
+            <Segmented value={translator} onChange={setTranslator}
+              options={[{ value: "auto", label: "Auto" }, { value: "speech", label: "Audio" }, { value: "text", label: "Text" }]} />
+            <span className="option-hint">
+              {translator === "auto" ? "Audio for Indian languages, text for others"
+                : translator === "speech" ? "Whisper translates the speech itself"
+                  : "IndicTrans2 / NLLB translate the transcript"}
+            </span>
+            <span className="option-label" style={{ marginTop: 6 }}>
               <Sparkles size={13} /> Translation polish
               <button type="button" className="icon-btn mini" onClick={redetect} disabled={redetecting}
                 title="Re-detect API keys and local model servers" aria-label="Re-detect LLM">
@@ -217,7 +227,7 @@ export function Composer({ system, onStart, onSystemChanged }: {
               </select>
             ) : null}
             <span className={`option-hint ${llmOk ? "" : "warn"}`}>
-              {llmOk ? `${llmModel ?? llm?.model} refines IndicTrans2 / NLLB drafts`
+              {llmOk ? `${llmModel ?? llm?.model} refines the translation`
                 : llm?.state === "checking" ? "Detecting API keys and local models…"
                   : llm?.state === "invalid" ? `Found but not usable: ${llm.detail}`
                     : "Add a key to .env (see .env.example) or start a local model server"}

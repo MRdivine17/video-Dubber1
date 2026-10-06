@@ -1,11 +1,15 @@
 """Step 5 — translate every line into natural, speakable English.
 
 Two passes:
-1. Machine translation on the GPU — IndicTrans2 for Indian languages (best open model
-   for Indic -> English), NLLB-200 for everything else.
-2. Optional LLM polish (OpenAI): rewrites each draft for meaning and natural spoken
-   phrasing, reading the source line and its neighbours, and keeps it inside a word
-   budget derived from the time the original speaker took. That budget is what keeps
+1. Translation on the GPU.
+   - Indian languages: Whisper translates each line's audio directly (dubber/speech_translate.py).
+     Measured on a 99-minute Tamil podcast, recognise-then-translate dropped or garbled 14% of
+     lines, mostly code-mixed English words written in Tamil script; translating from the
+     audio keeps them. Lines where that comes back empty fall back to text translation.
+   - Other languages: NLLB-200 on the transcript (IndicTrans2 for Indian languages if chosen).
+2. Optional LLM polish (any provider, see dubber/llm.py): rewrites each draft for meaning and
+   natural spoken phrasing, reading the source line and its neighbours, and keeps it inside a
+   word budget derived from the time the original speaker took. That budget is what keeps
    the dub in sync without having to speed the voice up much.
 """
 from __future__ import annotations
@@ -20,6 +24,7 @@ from . import llm
 from .gpu import DEVICE
 from .media import free_gpu, read_json, write_json
 from .reporting import ProgressLike, log
+from .speech_translate import looks_unreliable, translate_speech
 
 # Whisper language code -> FLORES-200 code.
 INDIC = {
@@ -62,27 +67,42 @@ WORDS_PER_SECOND = 2.9
 
 
 def translate_segments(segments: list[dict], language: str, progress: ProgressLike, polish: bool,
-                       llm_model: str | None, work_dir: Path) -> tuple[list[str], list[str], dict]:
+                       llm_model: str | None, work_dir: Path, audio_16k: Path, whisper_model: str,
+                       translator: str = "auto") -> tuple[list[str], list[str], dict]:
     """Return (machine drafts, final English lines, {engine, polish_model}), one line per segment.
 
-    `llm_model` overrides the auto-detected model (see dubber/llm.py); None = auto.
+    translator:
+      "speech" - Whisper translates each line's audio directly to English
+      "text"   - IndicTrans2 / NLLB-200 translate the recognised text
+      "auto"   - speech for Indian languages (code-mixed speech loses content through text MT),
+                 text for everything else
+    `llm_model` overrides the auto-detected polish model (see dubber/llm.py); None = auto.
     Finished batches are saved under `work_dir`, so a stopped run resumes where it left off.
     """
     sources = [s["text"] for s in segments]
-    checkpoints = {name: work_dir / f"{name}.partial.json" for name in ("indictrans2", "nllb", "polish")}
+    checkpoints = {name: work_dir / f"{name}.partial.json"
+                   for name in ("speech", "indictrans2", "nllb", "fallback", "polish")}
+    use_speech = translator == "speech" or (translator == "auto" and language in INDIC)
 
-    # Machine translation first, so its GPU memory is freed before a local LLM is loaded.
-    engine = "none (already English)"
+    # Translation models first, so their GPU memory is freed before a local LLM is loaded.
     if language == "en":
-        drafts = sources
-    elif language in INDIC and indictrans_available():
-        try:
-            drafts, engine = _indictrans(sources, INDIC[language], progress, checkpoints["indictrans2"]), "IndicTrans2-1B"
-        except Exception as exc:
-            log(f"IndicTrans2 failed ({exc}); falling back to NLLB-200", "warn")
-            drafts, engine = _nllb(sources, NLLB[language], progress, checkpoints["nllb"]), "NLLB-200-1.3B"
+        drafts, engine = sources, "none (already English)"
+    elif use_speech:
+        drafts = translate_speech(audio_16k, segments, language, whisper_model, progress, checkpoints["speech"])
+        engine = f"Whisper {whisper_model} speech translation"
+        weak = [i for i, (text, seg) in enumerate(zip(drafts, segments))
+                if looks_unreliable(text, seg["end"] - seg["start"])]
+        if weak and (language in NLLB):
+            fixed, text_engine = _text_translate([sources[i] for i in weak], language, progress,
+                                                 checkpoints["fallback"], checkpoints["fallback"], quiet=True)
+            log(f"{len(weak)} of {len(segments)} lines came back empty or looping from speech translation; "
+                f"those lines were translated from the transcript with {text_engine}")
+            for i, text in zip(weak, fixed):
+                if text:
+                    drafts[i] = text
+            engine += f" (+ {text_engine} on {len(weak)} lines)"
     elif language in NLLB:
-        drafts, engine = _nllb(sources, NLLB[language], progress, checkpoints["nllb"]), "NLLB-200-1.3B"
+        drafts, engine = _text_translate(sources, language, progress, checkpoints["indictrans2"], checkpoints["nllb"])
     else:
         drafts, engine = [""] * len(sources), "LLM only"   # no MT model: the LLM translates from source alone
 
@@ -101,16 +121,29 @@ def translate_segments(segments: list[dict], language: str, progress: ProgressLi
     return drafts, finals, {"engine": engine, "polish_model": llm_cfg.describe() if llm_cfg else None}
 
 
+def _text_translate(texts: list[str], language: str, progress: ProgressLike,
+                    indictrans_checkpoint: Path, nllb_checkpoint: Path, quiet: bool = False) -> tuple[list[str], str]:
+    """Text MT: IndicTrans2 for Indian languages when available, NLLB-200 otherwise."""
+    if language in INDIC and indictrans_available(quiet):
+        try:
+            return _indictrans(texts, INDIC[language], progress, indictrans_checkpoint), "IndicTrans2-1B"
+        except Exception as exc:
+            log(f"IndicTrans2 failed ({exc}); falling back to NLLB-200", "warn")
+    return _nllb(texts, NLLB[language], progress, nllb_checkpoint), "NLLB-200-1.3B"
+
+
 # ── machine translation ─────────────────────────────────────────────────────────
 
-def indictrans_available() -> bool:
+def indictrans_available(quiet: bool = False) -> bool:
     """IndicTrans2 is gated on Hugging Face: usable once cached locally or when HF_TOKEN is set."""
     from huggingface_hub import try_to_load_from_cache
 
     cached = isinstance(try_to_load_from_cache(INDICTRANS_MODEL, "config.json"), str)
     if cached:
         return True
-    if not os.environ.get("HF_TOKEN"):
+    if quiet:
+        pass
+    elif not os.environ.get("HF_TOKEN"):
         log("IndicTrans2 is gated (set HF_TOKEN after accepting its terms); using NLLB-200", "warn")
     else:
         # Dubbing runs with models offline; the gated download happens separately.

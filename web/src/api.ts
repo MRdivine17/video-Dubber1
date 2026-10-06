@@ -1,5 +1,7 @@
 // Types and calls for the Python API (server/app.py).
 
+/** auto = from audio for Indian languages, from text otherwise. */
+export type Translator = "auto" | "speech" | "text";
 export type StageStatus = "pending" | "running" | "done" | "cached" | "failed" | "cancelled";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export type LogLevel = "info" | "warn" | "error" | "success";
@@ -130,6 +132,7 @@ export interface JobSnap {
     max_minutes: number | null;
     voice: string;
     speakers: number | null;
+    translator: Translator;
     polish: boolean;
     llm_model: string | null;
     language: string | null;
@@ -162,6 +165,7 @@ export interface JobRequest {
   max_minutes: number | null;
   voice: "clone" | "edge";
   speakers: number | null;
+  translator: Translator;
   polish: boolean;
   llm_model: string | null;
 }

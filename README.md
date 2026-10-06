@@ -25,7 +25,8 @@ YouTube URL
         → source-language text with word timestamps → regrouped into sentences
   4  Speakers: ECAPA embeddings + clustering (or pyannote 3.1 if HF_TOKEN is set)
         → each line labelled S1, S2, ...; ~20 s voice reference cut per speaker
-  5  Translate: IndicTrans2-1B (Indian languages) / NLLB-200-1.3B (others)
+  5  Translate: Indian languages → Whisper translates each line's audio directly
+        (text MT fallback on lines that come back empty); others → NLLB-200-1.3B
         → optional LLM polish: natural phrasing + a word budget per line
   6  Coqui XTTS v2: English speech cloned from each speaker's reference
         (edge-tts neural voices as fallback, or with --voice edge)
@@ -43,7 +44,8 @@ YouTube URL
 | `dubber/separate.py` | 2: Demucs, processed in 5-minute chunks |
 | `dubber/transcribe.py` | 3: Whisper and sentence regrouping |
 | `dubber/diarize.py` | 4: speaker detection |
-| `dubber/translate.py` | 5: IndicTrans2 / NLLB and the LLM polish |
+| `dubber/translate.py` | 5: translator choice, IndicTrans2 / NLLB text MT, LLM polish |
+| `dubber/speech_translate.py` | 5: Whisper speech-to-English translation per line |
 | `dubber/tts.py` | 6: voice references, XTTS cloning, edge-tts |
 | `dubber/align.py` | 7: time fitting, loudness matching, mix, SRT |
 | `dubber/media.py` | ffmpeg / ffprobe helpers |
@@ -56,7 +58,13 @@ YouTube URL
 
 - **Separate the speech before doing anything else.** Replacing the whole soundtrack would also delete the music and effects, and the video would lose its energy. Demucs splits the speech from the background, so only the speech is dubbed. The isolated speech also gives Whisper cleaner input (fewer hallucinations over music) and clean voice references for cloning.
 - **Sentences, not Whisper segments.** Whisper's segments often break a sentence in half. Translating half-sentences gives literal, broken English. Word timestamps let us rebuild whole sentences and keep their exact start and end times.
-- **Translate for meaning.** IndicTrans2 is the strongest open model for Indian languages into English, and NLLB-200 covers the rest. When an LLM is available on the machine (any provider, detected automatically, see below), an LLM pass rewrites each draft. It reads the source line and the lines around it, fixes mistranslations, makes the English sound spoken rather than written, and keeps each line within a word budget based on how long the original speaker talked.
+- **Translate from the audio for Indian languages.** I measured where words went missing on a 99-minute Tamil podcast (`scripts/diagnose_dub.py`):
+  - Recognition missed 0.5% of the speech.
+  - Voice synthesis reproduced 97% of the English words.
+  - Text translation lost or garbled 14% of the lines.
+
+  Indian-language speech mixes in English words ("content creation"). Whisper writes those words in Tamil script, then the text model mistranslates them ("Canton Cration Mall"). So for Indian languages, Whisper translates each transcript line's audio straight to English, on that line's exact time span, which keeps the timing. Lines that come back empty or looping fall back to text translation. `--translator text|speech` overrides the automatic choice.
+- **Translate for meaning.** For other languages NLLB-200 translates the transcript; IndicTrans2 is used for Indian languages when text translation is chosen. When an LLM is available on the machine (any provider, detected automatically, see below), an LLM pass rewrites each draft. It reads the source line and the lines around it, fixes mistranslations, makes the English sound spoken rather than written, and keeps each line within a word budget based on how long the original speaker talked.
 - **Timing is solved in two places.**
   1. The translation is asked to fit the time available.
   2. The aligner speeds a line up only when it would run into the next line. It keeps the pitch (ffmpeg rubberband) and caps the speed-up at 1.35x.
@@ -149,6 +157,7 @@ GPU only: every model runs on CUDA (Whisper int8/fp16, Demucs, NLLB/IndicTrans2 
 --lang hi|ta|de|...   skip language auto-detection
 --voice clone|edge    XTTS voice cloning (default) or edge-tts stock voices
 --speakers N          force the number of speakers
+--translator auto|speech|text   translate from the audio or the transcript (auto: audio for Indian languages)
 --no-polish           skip the LLM pass
 --force               ignore cached results (clean timing run)
 ```

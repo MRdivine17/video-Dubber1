@@ -123,6 +123,7 @@ class JobRequest(BaseModel):
     voice: Literal["clone", "edge"] = "clone"
     speakers: int | None = Field(None, ge=1, le=8)
     language: str | None = Field(None, max_length=5)
+    translator: Literal["auto", "speech", "text"] = "auto"
     polish: bool = True
     llm_model: str | None = Field(None, max_length=200)   # None = auto-detected model
     force: bool = False
@@ -173,7 +174,8 @@ def create_job(req: JobRequest) -> dict:
     if not is_youtube_url(url):
         raise HTTPException(422, "Paste a YouTube video link (youtube.com/watch?v=... or youtu.be/...).")
     options = Options(url=url, max_minutes=req.max_minutes, voice=req.voice, speakers=req.speakers,
-                      language=req.language or None, polish=req.polish, llm_model=req.llm_model or None,
+                      language=req.language or None, translator=req.translator,
+                      polish=req.polish, llm_model=req.llm_model or None,
                       force=req.force)
     job = manager.submit(options, preview=None)
     return job.snapshot(with_media)

@@ -114,7 +114,8 @@ class Job:
             return {
                 **self.summary(),
                 "options": {"max_minutes": self.options.max_minutes, "voice": self.options.voice,
-                            "speakers": self.options.speakers, "polish": self.options.polish,
+                            "speakers": self.options.speakers, "translator": self.options.translator,
+                            "polish": self.options.polish,
                             "llm_model": self.options.llm_model, "language": self.options.language},
                 "started": self.started,
                 "finished": self.finished,

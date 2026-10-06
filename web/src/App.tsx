@@ -99,6 +99,7 @@ export default function App() {
       max_minutes: job.options.max_minutes,
       voice: job.options.voice as JobRequest["voice"],
       speakers: job.options.speakers,
+      translator: job.options.translator ?? "auto",
       polish: job.options.polish,
       llm_model: job.options.llm_model,
     });

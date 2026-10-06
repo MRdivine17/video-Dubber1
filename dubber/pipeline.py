@@ -110,8 +110,9 @@ def run(opts: Options, reporter: Reporter | None = None) -> dict:
             lines = [row["english"] for row in read_json(translation_file)]
             translation_info = read_json(translation_info_file)
         else:
-            drafts, lines, translation_info = translate_segments(segments, language, st.progress,
-                                                                 opts.polish, opts.llm_model, work)
+            drafts, lines, translation_info = translate_segments(
+                segments, language, st.progress, opts.polish, opts.llm_model, work,
+                audio_16k=vocals16, whisper_model=opts.whisper_model, translator=opts.translator)
             write_json(translation_info_file, translation_info)
             write_json(translation_file, [
                 {"id": i, "start": s["start"], "end": s["end"], "speaker": labels[i],
