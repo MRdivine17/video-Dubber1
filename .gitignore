@@ -1,0 +1,26 @@
+# Python environment and caches
+.venv/
+.uv-cache/
+__pycache__/
+*.pyc
+
+# Downloaded model weights, per-video work files, finished dubs
+models/
+work/
+output/
+
+# Local secrets (copy .env.example to .env)
+.env
+
+# Web UI dependencies and build output (setup_env.ps1 runs npm install + npm run build)
+web/node_modules/
+web/dist/
+.npm-cache/
+
+# Run logs
+*.log
+*_log.txt
+setup_log*.txt
+verify_full.txt
+indictrans_*.txt
+web/npm_log.txt

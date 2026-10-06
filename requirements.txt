@@ -1,0 +1,56 @@
+# Everything the dubbing pipeline + web app needs, pinned to tested versions.
+#
+#   pip install -r requirements.txt
+#   uv pip install -r requirements.txt --index-strategy unsafe-best-match
+#
+# PyTorch comes from the CUDA 12.8 index (NVIDIA GPU + recent driver required).
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# GPU deep-learning runtime. torchaudio 2.9+ removed the audio I/O demucs relies on.
+torch==2.7.1+cu128
+torchaudio==2.7.1+cu128
+
+# 1. Download
+yt-dlp[default]==2026.8.19
+
+# 2. Speech / music separation
+demucs==4.0.1
+
+# 3. Speech recognition
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+av==18.1.0
+
+# 4. Speaker identification
+speechbrain==1.1.1
+scikit-learn==1.9.1
+
+# 5. Translation. transformers stays on 4.x: IndicTransToolkit breaks on 5.x, coqui-tts needs >= 4.57
+transformers==4.57.6
+tokenizers==0.22.2
+huggingface-hub==0.36.2
+sentencepiece==0.2.2
+sacremoses==0.2.0
+IndicTransToolkit==1.1.1
+
+# 5b. LLM polish: provider auto-detected from the keys on the machine (see .env.example)
+openai==3.24.0
+anthropic
+python-dotenv==1.2.4
+
+# 6. Voice: XTTS v2 voice cloning, edge-tts neural voices as the alternative
+coqui-tts==0.27.5
+spacy==3.8.16          # XTTS sentence splitting (enable_text_splitting) imports it
+edge-tts==7.2.8
+
+# Audio I/O and numerics
+soundfile==0.14.0
+numpy==2.2.6
+
+# Web app (FastAPI backend) and terminal progress
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+rich==15.0.0
+
+# Optional, only with HF_TOKEN (gated model): pyannote speaker diarization
+# pyannote.audio==3.3.2
